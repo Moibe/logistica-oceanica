@@ -27,10 +27,32 @@ server falla en vez de saltar al siguiente libre.
 
 | Ruta             | Stack             | Qué demuestra                                                                                              |
 | ---------------- | ----------------- | ---------------------------------------------------------------------------------------------------------- |
-| `/map/canvas`    | d3-geo + Canvas2D | Proyección real dibujada como vectores a devicePixelRatio. Zoom 48×, tres proyecciones, swap 110m→50m.       |
+| `/map/canvas`    | d3-geo + Canvas2D | Proyección real dibujada como vectores a devicePixelRatio. Zoom 48×, tres proyecciones, swap 110m→50m, mundo repetido, cámara animada y colisión de etiquetas. |
 | `/map/globe`     | Threlte + three   | El mismo mundo sobre una esfera: costas en líneas, rutas como tubos aditivos, estelas con degradado.         |
 | `/map/maplibre`  | maplibre-gl       | Capas GL reales sobre el mismo TopoJSON local. Mercator o globo, sin tiles externos ni API keys.             |
 | `/ship`          | Threlte + GLSL    | Mar por shader y un portacontenedores de primitivas que muestrea la misma superficie que dibuja el shader.   |
+
+## Lo que la vista Canvas le robó a MapLibre
+
+Tres comportamientos que un mapa oceánico necesita y que en Canvas salen baratos,
+todos en [`src/lib/map/CanvasMap.svelte`](src/lib/map/CanvasMap.svelte):
+
+1. **Mundo repetido.** En las proyecciones cilíndricas (equirectangular y Mercator) el
+   mundo se tesela horizontalmente: los mismos `Path2D` ya horneados se dibujan una vez
+   por copia visible, así que puedes perseguir un barco por el Pacífico sin que el mapa
+   se acabe. `worldOffsets()` calcula qué copias tocan la pantalla; todo —costas, rutas,
+   estelas, puertos, cascos y el hit-test— itera sobre esa lista.
+2. **Cámara animada (`flyTo` + `Seguir`).** Interpolación del `ZoomTransform` en un rAF,
+   con la escala en espacio logarítmico para que no dé un tirón. `Seguir` fija la cámara
+   al barco seleccionado; arrastrar la suelta, la rueda no. El objetivo siempre se
+   traslada a la copia del mundo más cercana, así que cruzar el antimeridiano no provoca
+   un salto de media vuelta al planeta.
+3. **Colisión de etiquetas.** Las candidatas se juntan durante el dibujo y se resuelven al
+   final por prioridad (barco seleccionado ≫ barco bajo el cursor ≫ resto ≫ puerto por
+   TEU), descartando las que chocan con una ya colocada.
+
+Lo que **no** se portó: teselado, atlas de glyphs y el spec de estilo. Resuelven problemas
+que este mapa no tiene.
 
 ## Arquitectura
 

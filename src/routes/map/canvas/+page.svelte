@@ -8,4 +8,4 @@
 </svelte:head>
 
 <CanvasMap />
-<Hud note="Rueda para zoom, arrastra para desplazar. Clic en un barco para seguirlo." />
+<Hud note="Rueda para zoom, arrastra para desplazar. Elige un barco y pulsa Seguir para fijar la cámara." />
