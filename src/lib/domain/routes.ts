@@ -6,47 +6,162 @@ import { port, type PortId } from './ports';
  * through Asia, so every real lane is expressed as a chain of chokepoints and
  * mid-ocean marks; the legs between consecutive marks are short enough that the
  * great circle stays wet.
+ *
+ * These are not decorative. An earlier, sparser set looked plausible on the map
+ * but drove ships through northern Sumatra, Honshu, Borneo, Madagascar, Oman
+ * and the Peruvian Andes — every single lane crossed land somewhere.
+ *
+ * The invariant now holds and is worth keeping: **every sampled point of every
+ * route must fall outside the 50m coastline**, except inside the Suez and
+ * Panama canals and within ~120 km of a port (berths sit in basins a
+ * generalised coastline swallows). Checking it means walking `ROUTES[].points`
+ * through a point-in-polygon test against `static/data/land-50m.json` — cheap
+ * to write, and the only way to know, because a lane that clips a peninsula
+ * looks perfectly fine at world zoom.
+ *
+ * Grouped by region; names say where, not what.
  */
 const SEA = {
-  malacca: [100.4, 3.0],
-  southChina: [113.5, 11.0],
-  eastChina: [123.0, 28.5],
-  luzon: [126.0, 20.0],
-  pacificNW: [160.0, 41.0],
-  pacificMid: [-175.0, 40.0],
-  pacificE: [-140.0, 36.0],
-  pacificTrop: [-140.0, 12.0],
-  indianMid: [68.0, -2.0],
-  indianNW: [60.0, 12.0],
-  arabianSea: [58.0, 22.0],
+  // --- East Asia -----------------------------------------------------------
+  eastChinaSea: [123.5, 30.0],
+  ryukyuGap: [128.0, 27.5],
+  taiwanE: [123.5, 24.5],
+  luzonStrait: [122.0, 20.5],
+  southChinaSea: [113.5, 11.0],
+  koreaStrait: [128.9, 34.3],
+  kyushuW: [128.3, 32.0],
+  osumi: [130.8, 30.5],
+  japanS: [135.5, 31.5],
+  bosoE: [141.8, 34.2],
+
+  // --- North Pacific -------------------------------------------------------
+  pacificNW: [158.0, 40.5],
+  pacificDate: [178.0, 45.5],
+  pacificNE: [-162.0, 46.0],
+  pacificE: [-135.0, 40.0],
+  socal: [-121.5, 34.5],
+
+  // --- Tropical Pacific ----------------------------------------------------
+  philippineSea: [134.0, 23.0],
+  pacificTropW: [155.0, 19.0],
+  pacificTropM: [-178.0, 15.0],
+  pacificTropE: [-150.0, 12.0],
+  pacificTropCA: [-118.0, 9.0],
+  costaRicaOff: [-88.0, 7.0],
+  azueroS: [-81.0, 6.8],
+  panamaApproach: [-79.5, 7.4],
+
+  // --- Panama and the Caribbean --------------------------------------------
+  // The leg between these two is the canal itself: the only place in the game
+  // where a lane crosses land on purpose.
+  panamaBay: [-79.7, 8.2],
+  colonOff: [-79.6, 9.9],
+  caribbeanSW: [-81.5, 13.5],
+  caribbeanW: [-84.0, 18.0],
+  yucatan: [-85.6, 21.6],
+  floridaStrait: [-82.5, 24.2],
+  keysS: [-80.5, 24.3],
+  miamiE: [-79.9, 26.0],
+  floridaE: [-79.8, 27.5],
+  hatterasOff: [-75.0, 34.0],
+  nyApproach: [-73.6, 39.6],
+
+  // --- North Atlantic ------------------------------------------------------
+  nantucket: [-68.0, 40.8],
+  atlanticNW: [-55.0, 43.5],
+  atlanticMid: [-38.0, 47.5],
+  atlanticNE: [-18.0, 49.5],
+  approachesW: [-9.0, 48.8],
+
+  // --- Western Europe ------------------------------------------------------
+  ushant: [-6.2, 48.3],
+  channelW: [-2.5, 49.8],
+  dover: [1.7, 51.1],
+  northSea: [4.2, 53.2],
+  elbe: [8.1, 54.1],
+  biscayW: [-9.5, 46.0],
+  finisterre: [-9.9, 43.2],
+  iberiaW: [-9.8, 38.5],
+  gibraltar: [-5.7, 35.95],
+  capeStVincent: [-9.3, 36.7],
+
+  // --- Mediterranean, Suez, Red Sea ----------------------------------------
+  sicilyCh: [11.9, 37.4],
+  algeriaOff: [7.5, 38.0],
+  medW: [3.0, 38.0],
+  alboran: [-2.5, 36.2],
+  medC: [17.0, 34.5],
+  medE: [30.0, 33.0],
+  portSaid: [32.3, 31.5],
+  suezCanal: [32.5, 30.3],
+  suezGulf: [33.4, 28.0],
+  redSeaN: [36.5, 24.0],
+  redSeaS: [40.0, 16.5],
   babElMandeb: [43.4, 12.6],
-  redSea: [37.5, 22.0],
-  suez: [32.55, 30.2],
-  medEast: [30.0, 33.5],
-  medMid: [15.0, 35.5],
-  gibraltar: [-5.6, 35.95],
-  iberia: [-10.0, 40.0],
-  biscay: [-10.0, 46.5],
-  ushant: [-6.0, 49.0],
-  channel: [1.6, 50.8],
-  northSea: [3.6, 53.2],
-  azores: [-35.0, 40.0],
-  atlanticNW: [-65.0, 40.5],
-  florida: [-79.5, 26.0],
-  caribbean: [-77.0, 13.0],
-  panamaE: [-79.3, 9.2],
-  panamaW: [-79.6, 8.6],
-  chiapas: [-95.0, 14.0],
-  humboldt: [-78.0, -12.0],
-  brazilS: [-45.0, -30.0],
-  atlanticS: [-15.0, -30.0],
-  goodHope: [19.0, -35.5],
-  agulhas: [32.0, -33.5],
-  mozambique: [42.0, -22.0],
-  ceylon: [82.0, 4.0],
-  arafura: [135.0, -10.5],
-  coralSea: [154.0, -25.0],
-  tasman: [152.5, -34.5],
+  gulfOfAden: [48.0, 12.3],
+  socotraN: [53.0, 14.5],
+
+  // --- Arabian Sea and the Gulf --------------------------------------------
+  gulfNE: [55.5, 26.5],
+  hormuz: [56.6, 26.9],
+  gulfOfOman: [58.8, 24.0],
+  rasAlHadd: [60.2, 22.4],
+  omanE: [59.5, 19.0],
+  arabianSeaC: [56.0, 14.0],
+  arabianSeaSW: [58.0, 13.0],
+  somaliaE: [51.0, 7.0],
+  kenyaOff: [46.0, -2.0],
+  tanzaniaOff: [42.5, -11.0],
+
+  // --- Indian Ocean and southern Africa ------------------------------------
+  ceylonS: [80.5, 4.5],
+  indianNE: [90.0, 0.0],
+  indianC: [72.0, -12.0],
+  indianSW: [62.0, -18.0],
+  madagascarS: [47.0, -29.5],
+  agulhas: [28.0, -36.0],
+  goodHope: [18.0, -35.5],
+  mozambiqueCh: [40.0, -20.0],
+  mozambiqueS: [35.5, -27.0],
+
+  // --- Malacca and the Indonesian archipelago ------------------------------
+  singaporeStr: [104.2, 1.1],
+  malaccaMid: [100.3, 3.4],
+  malaccaN: [98.8, 5.2],
+  malaccaNW: [95.5, 6.3],
+  karimata: [108.5, -3.0],
+  javaSea: [113.0, -5.5],
+  lombok: [115.6, -8.8],
+  sumbaS: [120.0, -11.5],
+  timorS: [126.0, -12.0],
+  arafura: [133.0, -10.5],
+  torres: [142.5, -9.8],
+  coralSea: [148.0, -16.0],
+  tasmanN: [154.5, -25.0],
+  tasman: [153.5, -32.0],
+
+  // --- South Atlantic ------------------------------------------------------
+  atlanticSE: [5.0, -32.0],
+  atlanticS: [-15.0, -28.0],
+  brazilS: [-38.0, -25.0],
+
+  // --- Pacific coast of the Americas ---------------------------------------
+  chileOff: [-73.0, -30.0],
+  chileN: [-72.0, -23.0],
+  peruS: [-73.5, -18.0],
+  peruC: [-78.0, -14.0],
+  peruN: [-81.0, -8.0],
+  sechura: [-81.8, -5.5],
+  ecuadorOff: [-82.0, -3.0],
+  colombiaOff: [-80.5, 3.0],
+  costaRicaW: [-85.0, 8.0],
+  guatemalaOff: [-92.0, 13.0],
+  oaxacaOff: [-100.5, 16.5],
+  guerreroOff: [-102.0, 17.4],
+  colimaOff: [-104.0, 18.6],
+  bajaS: [-107.0, 18.5],
+  bajaC: [-113.0, 23.0],
+  bajaW: [-118.5, 28.5],
 } satisfies Record<string, LonLat>;
 
 type Mark = PortId | keyof typeof SEA;
@@ -76,9 +191,12 @@ const SPECS: RouteSpec[] = [
     to: 'rotterdam',
     color: '#4cc9ff',
     via: [
-      'eastChina', 'southChina', 'singapore', 'malacca', 'ceylon', 'indianNW',
-      'babElMandeb', 'redSea', 'suez', 'medEast', 'medMid', 'gibraltar',
-      'iberia', 'biscay', 'ushant', 'channel', 'northSea',
+      'eastChinaSea', 'taiwanE', 'luzonStrait', 'southChinaSea', 'singaporeStr',
+      'singapore', 'malaccaMid', 'malaccaN', 'malaccaNW', 'ceylonS', 'arabianSeaSW',
+      'socotraN', 'gulfOfAden', 'babElMandeb', 'redSeaS', 'redSeaN', 'suezGulf',
+      'suezCanal', 'portSaid', 'medE', 'medC', 'sicilyCh', 'algeriaOff', 'medW',
+      'alboran', 'gibraltar', 'capeStVincent', 'iberiaW',
+      'finisterre', 'biscayW', 'ushant', 'channelW', 'dover', 'northSea',
     ],
   },
   {
@@ -87,7 +205,12 @@ const SPECS: RouteSpec[] = [
     from: 'busan',
     to: 'losangeles',
     color: '#ffd166',
-    via: ['eastChina', 'pacificNW', 'pacificMid', 'pacificE'],
+    // Arcs north almost to the Aleutians, which is what a great circle across
+    // this ocean actually does — the old flat run along 40°N was 20% too long.
+    via: [
+      'koreaStrait', 'kyushuW', 'osumi', 'japanS', 'bosoE', 'pacificNW',
+      'pacificDate', 'pacificNE', 'pacificE', 'socal',
+    ],
   },
   {
     id: 'panama',
@@ -96,8 +219,12 @@ const SPECS: RouteSpec[] = [
     to: 'newyork',
     color: '#a78bfa',
     via: [
-      'eastChina', 'luzon', 'pacificTrop', 'chiapas', 'panamaW', 'panamaE',
-      'caribbean', 'florida', 'atlanticNW',
+      'eastChinaSea', 'ryukyuGap', 'philippineSea', 'pacificTropW', 'pacificTropM',
+      'pacificTropE', 'pacificTropCA', 'costaRicaOff', 'azueroS', 'panamaApproach',
+      'panamaBay', 'colonOff',
+      'caribbeanSW', 'caribbeanW', 'yucatan', 'floridaStrait', 'keysS', 'miamiE',
+      'floridaE',
+      'hatterasOff', 'nyApproach',
     ],
   },
   {
@@ -106,9 +233,12 @@ const SPECS: RouteSpec[] = [
     from: 'singapore',
     to: 'santos',
     color: '#4ade80',
+    // South of Madagascar, not up the Mozambique Channel: that is both the real
+    // routing for this trade and the only way the leg stays off the island.
     via: [
-      'malacca', 'ceylon', 'indianMid', 'mozambique', 'agulhas', 'goodHope',
-      'atlanticS', 'brazilS',
+      'malaccaMid', 'malaccaN', 'malaccaNW', 'indianNE', 'indianC', 'indianSW',
+      'madagascarS',
+      'agulhas', 'goodHope', 'atlanticSE', 'atlanticS', 'brazilS',
     ],
   },
   {
@@ -117,7 +247,10 @@ const SPECS: RouteSpec[] = [
     from: 'newyork',
     to: 'hamburg',
     color: '#f472b6',
-    via: ['atlanticNW', 'azores', 'iberia', 'biscay', 'ushant', 'channel', 'northSea'],
+    via: [
+      'nyApproach', 'nantucket', 'atlanticNW', 'atlanticMid', 'atlanticNE',
+      'approachesW', 'ushant', 'channelW', 'dover', 'northSea', 'elbe',
+    ],
   },
   {
     id: 'oceania',
@@ -125,7 +258,10 @@ const SPECS: RouteSpec[] = [
     from: 'singapore',
     to: 'sydney',
     color: '#fb923c',
-    via: ['malacca', 'arafura', 'coralSea', 'tasman'],
+    via: [
+      'singaporeStr', 'karimata', 'javaSea', 'lombok', 'sumbaS', 'timorS',
+      'arafura', 'torres', 'coralSea', 'tasmanN', 'tasman',
+    ],
   },
   {
     id: 'gulf-india',
@@ -133,7 +269,10 @@ const SPECS: RouteSpec[] = [
     from: 'jebelali',
     to: 'durban',
     color: '#22d3ee',
-    via: ['arabianSea', 'indianNW', 'indianMid', 'mozambique'],
+    via: [
+      'gulfNE', 'hormuz', 'gulfOfOman', 'rasAlHadd', 'omanE', 'arabianSeaC', 'somaliaE',
+      'kenyaOff', 'tanzaniaOff', 'mozambiqueCh', 'mozambiqueS',
+    ],
   },
   {
     id: 'west-coast',
@@ -141,7 +280,13 @@ const SPECS: RouteSpec[] = [
     from: 'valparaiso',
     to: 'losangeles',
     color: '#e879f9',
-    via: ['humboldt', 'panamaW', 'chiapas', 'manzanillo'],
+    // Hugs the coast the whole way, Manzanillo included. It no longer detours
+    // into the Bay of Panama, which added a thousand miles for nothing.
+    via: [
+      'chileOff', 'chileN', 'peruS', 'peruC', 'peruN', 'sechura', 'ecuadorOff',
+      'colombiaOff', 'costaRicaW', 'guatemalaOff', 'oaxacaOff', 'guerreroOff',
+      'colimaOff', 'manzanillo', 'bajaS', 'bajaC', 'bajaW',
+    ],
   },
 ];
 

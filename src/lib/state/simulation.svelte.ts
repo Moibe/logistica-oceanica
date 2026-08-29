@@ -1,8 +1,16 @@
 import { browser } from '$app/environment';
 import { advance, INITIAL_FLEET, type Ship } from '$lib/domain/fleet';
 
-/** Simulated hours that pass per real second at 1x. Roughly half a day/second. */
-const BASE_HOURS_PER_SECOND = 12;
+/**
+ * Simulated hours per real second at 1x, i.e. one simulated day every eight
+ * seconds. Tuned against the fleet rather than picked: the shortest lane in the
+ * game is nine days and the longest twenty-eight, so at 1x a voyage runs from
+ * about a minute to nearly four — long enough to watch a decision play out.
+ * At 12 h/s (the first guess) the whole Asia–Europe run took 42 seconds and a
+ * simulated year went by in twelve minutes, which left nowhere to stand.
+ * 16x still skips a fortnight in about ten seconds when you want to fast-forward.
+ */
+const BASE_HOURS_PER_SECOND = 3;
 
 export const SPEED_STEPS = [0, 0.25, 1, 4, 16] as const;
 
