@@ -11,8 +11,11 @@ Threlte 8 / three, canvas a pantalla completa con HUD flotante encima.
 
 ```sh
 npm install
-npm run dev
+npm run dev   # http://localhost:4444
 ```
+
+El puerto es fijo (`strictPort` en `vite.config.ts`): si 4444 está ocupado el dev
+server falla en vez de saltar al siguiente libre.
 
 | Comando         | Qué hace                              |
 | --------------- | ------------------------------------- |
