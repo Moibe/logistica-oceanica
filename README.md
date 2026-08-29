@@ -32,6 +32,21 @@ server falla en vez de saltar al siguiente libre.
 | `/map/maplibre`  | maplibre-gl       | Capas GL reales sobre el mismo TopoJSON local. Mercator o globo, sin tiles externos ni API keys.             |
 | `/ship`          | Threlte + GLSL    | Mar por shader y un portacontenedores de primitivas que muestrea la misma superficie que dibuja el shader.   |
 
+### Cuál es el mapa del juego
+
+**`/map/canvas` es el mapa principal.** Se construyeron los tres para poder compararlos con
+los mismos datos, y esa comparación ya se resolvió (2026-08-29): Canvas gana porque los
+datos son pocos y propios, la animación va a 60 fps sin pelearse con nadie, y el control
+del píxel es justo lo que pide la estética de consola.
+
+`/map/globe` y `/map/maplibre` **se quedan a propósito**, congelados, como laboratorio para
+experimentar más adelante. No son código muerto y no hay que emparejarlos en funciones con
+el Canvas — si algo se agrega, se agrega al Canvas salvo que se diga lo contrario.
+
+MapLibre volvería a estar sobre la mesa el día que haga falta acercarse a un puerto real
+(muelles, costa a escala de metros, nombres de terminal): ahí su teselado y su manejo de
+etiquetas ahorran meses. Para vista de mundo, no compensa el megabyte.
+
 ## Lo que la vista Canvas le robó a MapLibre
 
 Tres comportamientos que un mapa oceánico necesita y que en Canvas salen baratos,
