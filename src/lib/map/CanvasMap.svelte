@@ -5,7 +5,7 @@
   import { zoom as d3zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
   import { position, wakeSpan } from '$lib/domain/fleet';
   import { PORTS } from '$lib/domain/ports';
-  import { ROUTES, route, slice } from '$lib/domain/routes';
+  import { pointAt, ROUTES, route, slice } from '$lib/domain/routes';
   import { sim } from '$lib/state/simulation.svelte';
   import { untrack } from 'svelte';
   import { loadWorld, type Resolution, type WorldGeometry } from './world';
@@ -461,18 +461,28 @@
       const isSelected = sim.selectedId === ship.id;
       const isHovered = hoveredId === ship.id;
 
-      // Screen-space heading: sample a hair ahead along the lane and take the
-      // angle between the two projected points, so the marker stays aligned
-      // with the drawn line even where the projection shears it.
-      const aheadT = Math.min(1, Math.max(0, ship.progress + 0.002 * ship.direction));
-      const ahead = toScreen(r.points.length ? projectedAt(r.id, aheadT) : at);
+      // Screen-space heading, as a central difference around the hull. Both
+      // samples come from `pointAt` — the same distance-parameterised helper
+      // that placed the ship — because mixing parameterisations is what made
+      // this chevron flip: an earlier version snapped the look-ahead to the
+      // nearest sampled vertex, which regularly landed *behind* the ship's
+      // interpolated position and spun the arrow 180°, over and over, as the
+      // rounded index stepped along.
+      //
+      // Doing it in screen space rather than reusing `heading()` from the
+      // domain is deliberate: the marker has to line up with the lane as
+      // drawn, and the projection shears that lane away from true bearing.
+      const eps = Math.min(0.02, 150 / r.lengthKm);
+      const clamp = (t: number) => Math.min(1, Math.max(0, t));
+      const behind = toScreen(pointAt(r, clamp(ship.progress - eps * ship.direction)));
+      const ahead = toScreen(pointAt(r, clamp(ship.progress + eps * ship.direction)));
       let angle = 0;
-      if (ahead) {
-        let dxa = ahead[0] - s[0];
+      if (behind && ahead) {
+        let dxa = ahead[0] - behind[0];
         // Fold the gap back across the seam, or a hull sitting on the
         // antimeridian spins 180° for a frame.
         if (seam > 0 && Math.abs(dxa) > seam) dxa -= Math.sign(dxa) * worldWidth * k;
-        angle = Math.atan2(ahead[1] - s[1], dxa);
+        angle = Math.atan2(ahead[1] - behind[1], dxa);
       }
 
       for (const dx of shifts) {
@@ -523,13 +533,6 @@
     }
 
     placeLabels(ctx, labels);
-  }
-
-  /** Lon/lat of a normalised position on a route, without importing pointAt twice. */
-  function projectedAt(routeId: string, t: number): [number, number] {
-    const r = route(routeId);
-    const i = Math.min(r.points.length - 1, Math.max(0, Math.round(t * (r.points.length - 1))));
-    return r.points[i];
   }
 
   function hexToRgba(hex: string, alpha: number): string {
