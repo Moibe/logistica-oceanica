@@ -83,7 +83,10 @@
       <div><dt>Destino</dt><dd>{detail.destination.name}</dd></div>
       <div><dt>Restante</dt><dd class="mono">{Math.round(detail.remainingKm).toLocaleString('es-MX')} km</dd></div>
       <div><dt>ETA</dt><dd class="mono">{eta(detail.etaHours)}</dd></div>
-      <div><dt>Carga</dt><dd class="mono">{selected.load.toLocaleString('es-MX')} TEU</dd></div>
+      <div>
+        <dt>Carga</dt>
+        <dd class="mono">{selected.load.toLocaleString('es-MX')} {detail.stats.unit}</dd>
+      </div>
     </dl>
   </section>
 {/if}

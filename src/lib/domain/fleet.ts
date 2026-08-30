@@ -1,24 +1,36 @@
 import { bearing, type LonLat } from './geo';
 import { pointAt, route, type Route, type RouteId } from './routes';
 
-export type ShipClass = 'ulcv' | 'panamax' | 'feeder' | 'tanker' | 'bulker';
+export type ShipClass = 'ulcv' | 'neopanamax' | 'feeder' | 'tanker' | 'bulker';
 
 export type ShipClassStats = {
   label: string;
   /** Service speed in knots. */
   speed: number;
-  /** Nominal capacity in TEU (or TEU-equivalent for the non-container hulls). */
+  /**
+   * Nominal capacity, in `unit`. Box boats are measured in containers and the
+   * bulk hulls in tonnes — there is no such thing as a TEU-equivalent for a
+   * bulk carrier, so the two are never mixed.
+   */
   capacity: number;
+  /**
+   * What `capacity` and `Ship.load` are counted in. Container ships carry TEU
+   * (twenty-foot equivalent units); a tanker or a bulk carrier carries tonnes
+   * of deadweight, and labelling those as TEU is simply wrong.
+   */
+  unit: 'TEU' | 't';
   /** Length overall in metres — the 3D scene scales the hull from this. */
   loa: number;
 };
 
 export const SHIP_CLASS_STATS: Record<ShipClass, ShipClassStats> = {
-  ulcv: { label: 'Ultra Large', speed: 21, capacity: 24000, loa: 400 },
-  panamax: { label: 'Neopanamax', speed: 22, capacity: 14000, loa: 366 },
-  feeder: { label: 'Feeder', speed: 18, capacity: 2500, loa: 180 },
-  tanker: { label: 'Petrolero', speed: 15, capacity: 320000, loa: 333 },
-  bulker: { label: 'Granelero', speed: 14, capacity: 180000, loa: 292 },
+  ulcv: { label: 'Ultra Large', speed: 21, capacity: 24000, unit: 'TEU', loa: 400 },
+  // 366 m is not a round number: it is the length limit of the locks the 2016
+  // Panama expansion opened, which is what defines the class.
+  neopanamax: { label: 'Neopanamax', speed: 22, capacity: 14000, unit: 'TEU', loa: 366 },
+  feeder: { label: 'Feeder', speed: 18, capacity: 2500, unit: 'TEU', loa: 180 },
+  tanker: { label: 'Petrolero', speed: 15, capacity: 320000, unit: 't', loa: 333 },
+  bulker: { label: 'Granelero', speed: 14, capacity: 180000, unit: 't', loa: 292 },
 };
 
 export type Ship = {
@@ -30,7 +42,11 @@ export type Ship = {
   progress: number;
   /** +1 sailing toward `to`, -1 on the return leg. Ships bounce at each end. */
   direction: 1 | -1;
-  /** Loaded TEU. Purely cosmetic for now; the HUD reports it as utilisation. */
+  /**
+   * Cargo aboard, in the class's `unit`. Set once at creation and never
+   * touched: with no port calls there is nothing to load or discharge against,
+   * so today it is a constant the HUD prints as an absolute figure.
+   */
   load: number;
 };
 
@@ -106,8 +122,8 @@ export function wakeSpan(ship: Ship, km: number): [from: number, to: number] {
 export const INITIAL_FLEET: Ship[] = [
   createShip({ id: 'evergreen', name: 'Ever Meridian', shipClass: 'ulcv', routeId: 'asia-europe', progress: 0.18 }),
   createShip({ id: 'polaris', name: 'MSC Polaris', shipClass: 'ulcv', routeId: 'asia-europe', progress: 0.72, direction: -1 }),
-  createShip({ id: 'kuroshio', name: 'Kuroshio Star', shipClass: 'panamax', routeId: 'transpacific', progress: 0.44 }),
-  createShip({ id: 'sierra', name: 'Sierra Madre', shipClass: 'panamax', routeId: 'panama', progress: 0.61 }),
+  createShip({ id: 'kuroshio', name: 'Kuroshio Star', shipClass: 'neopanamax', routeId: 'transpacific', progress: 0.44 }),
+  createShip({ id: 'sierra', name: 'Sierra Madre', shipClass: 'neopanamax', routeId: 'panama', progress: 0.61 }),
   createShip({ id: 'austral', name: 'Austral Dawn', shipClass: 'bulker', routeId: 'cape', progress: 0.33 }),
   createShip({ id: 'hansa', name: 'Hansa Nord', shipClass: 'feeder', routeId: 'atlantic', progress: 0.5, direction: -1 }),
   createShip({ id: 'coral', name: 'Coral Trader', shipClass: 'feeder', routeId: 'oceania', progress: 0.25 }),
