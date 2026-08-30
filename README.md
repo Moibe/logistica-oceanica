@@ -23,6 +23,9 @@ server falla en vez de saltar al siguiente libre.
 | `npm run build` | Build de producción (`adapter-auto`)  |
 | `npm run check` | `svelte-check` sobre todo el proyecto |
 
+En desarrollo hay además una herramienta en `/audit` que verifica que ninguna ruta cruce
+tierra — ver [El invariante de las rutas](#el-invariante-de-las-rutas-y-cómo-verificarlo).
+
 ## Las cuatro vistas
 
 | Ruta             | Stack             | Qué demuestra                                                                                              |
@@ -120,17 +123,25 @@ El reloj corre a **3 horas simuladas por segundo real** en 1×, o sea un día ca
 segundos: la travesía más corta dura ~1 minuto y la más larga ~3,5. Antes iba a 12 h/s y
 Asia–Europa completa pasaba en 42 segundos, que no dejaba dónde tomar una decisión.
 
-### El invariante de las rutas
+### El invariante de las rutas, y cómo verificarlo
 
-**Ninguna ruta cruza tierra.** Se verifica caminando `ROUTES[].points` contra
+**Ninguna ruta cruza tierra.** Cada punto muestreado se prueba contra
 `static/data/land-50m.json` con un test punto-en-polígono; las únicas excepciones son los
 canales de Suez y Panamá, y un radio de ~120 km alrededor de cada puerto (los atracaderos
 están en dársenas que una costa generalizada se traga).
 
-Vale la pena volver a correrlo cada vez que se mueva un waypoint: una ruta que recorta una
-península se ve perfectamente bien al zoom de mundo. La primera versión de estos waypoints
-metía barcos por Sumatra, Honshu, Borneo, Madagascar, Omán y los Andes peruanos — las ocho
-rutas cruzaban tierra en algún punto y ninguna se veía mal.
+Corre **`localhost:4444/audit`** cada vez que muevas un waypoint, agregues un puerto o
+inventes una ruta. Tarda ~300 ms y te da las coordenadas exactas de los puntos secos, en el
+formato que pegas de vuelta en `routes.ts`. El enlace «Auditoría» solo aparece en la nav en
+desarrollo; en producción la ruta responde 404.
+
+- Lógica: [`src/lib/domain/audit.ts`](src/lib/domain/audit.ts) — TS puro, sin nada de UI.
+- Página: [`src/routes/audit/+page.svelte`](src/routes/audit/+page.svelte) — solo presenta.
+
+Existe porque el bug era invisible. La primera versión de estos waypoints metía barcos por
+Sumatra, Honshu, Borneo, Madagascar, Omán y los Andes peruanos: **las ocho rutas cruzaban
+tierra** y ninguna se veía mal al zoom de mundo. Una línea que recorta una península es
+indistinguible de una que la rodea hasta que pruebas punto por punto.
 
 ## Detalles que conviene no romper
 

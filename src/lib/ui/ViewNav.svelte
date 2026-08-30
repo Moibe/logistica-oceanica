@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dev } from '$app/environment';
   import { page } from '$app/state';
 
   /**
@@ -31,6 +32,13 @@
       </a>
     {/each}
   </div>
+  {#if dev}
+    <!-- Development only. Deliberately styled as a small chip rather than a
+         fifth view card: it is a check on the data, not somewhere to play. -->
+    <a class="tool" class:is-active={page.url.pathname === '/audit'} href="/audit">
+      Auditoría
+    </a>
+  {/if}
 </nav>
 
 <style>
@@ -47,6 +55,8 @@
   }
 
   .brand {
+    flex: none;
+    white-space: nowrap;
     display: flex;
     align-items: center;
     gap: 0.55rem;
@@ -76,12 +86,34 @@
     gap: 0.1rem;
     padding: 0.35rem 0.7rem;
     font-size: 0.8rem;
+    /* Never let a card shrink below its label: squeezed, the hint wraps onto a
+       third line and the whole bar grows taller instead of wider. */
+    flex: none;
+    white-space: nowrap;
   }
 
   .hint {
     font-size: 0.58rem;
     letter-spacing: 0.08em;
     color: var(--muted);
+  }
+
+  .tool {
+    flex: none;
+    white-space: nowrap;
+    padding: 0.3rem 0.6rem;
+    margin-left: 0.2rem;
+    border: 1px dashed var(--line);
+    border-radius: 9px;
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+
+  .tool:hover,
+  .tool.is-active {
+    color: var(--ink);
+    border-color: rgba(76, 201, 255, 0.45);
   }
 
   @media (max-width: 720px) {
