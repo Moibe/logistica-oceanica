@@ -115,13 +115,47 @@ Velocidades y distancias están medidas contra la realidad, no puestas a ojo:
 | Golfo – Índico | 4.109 nm | ~3.800 |
 
 Las travesías salen entre 8,5 y 27 días según buque y ruta, que es la banda correcta
-para tiempo de mar puro a velocidad de servicio. No se modelan escalas ni slow steaming,
-así que Asia–Europa da 21,6 días en vez de los 30–35 que anuncia una naviera (esos
-incluyen puertos intermedios y navegar más lento a propósito).
+para tiempo de mar puro a velocidad de servicio. Asia–Europa da 21,6 días en vez de los
+30–35 que anuncia una naviera; esos incluyen puertos intermedios, que este juego no
+modela — cada ruta va directa entre sus dos únicos puertos.
 
 El reloj corre a **3 horas simuladas por segundo real** en 1×, o sea un día cada ocho
 segundos: la travesía más corta dura ~1 minuto y la más larga ~3,5. Antes iba a 12 h/s y
 Asia–Europa completa pasaba en 42 segundos, que no dejaba dónde tomar una decisión.
+
+## Combustible, escalas y velocidad de crucero
+
+Cada buque lleva un tanque (`src/lib/domain/fleet.ts`), lo quema navegando y lo rellena
+al atracar. Tres piezas, una sola fuente de verdad:
+
+- **Combustible.** Consumo en toneladas/día, escala **al cubo** de la velocidad — así
+  funciona de verdad la resistencia de un casco, y es la razón real por la que la
+  navegación lenta ahorra tanto: 0,6× la velocidad de diseño quema ~22 % del consumo
+  normal; 1,15× quema ~152 %.
+- **Escalas.** Al llegar a un puerto el buque **atraca** (`status: 'docked'`) entre 12 h
+  (feeder) y 30 h (ULCV) según la clase, reabasteciendo con una interpolación lineal
+  hasta llenar el tanque justo cuando zarpa — el medidor sube visiblemente, no salta.
+  Un buque atracado se dibuja como un disco estático con un anillo pulsante (no la
+  flecha direccional, que implicaría que sigue en marcha) y no deja estela.
+- **Velocidad de crucero.** Control deslizante en el panel del buque seleccionado, entre
+  0,6× y 1,15× la velocidad de diseño de su clase. Sube el ETA baja el consumo y
+  viceversa — es la decisión real que introduce el combustible.
+
+La capacidad del tanque de cada clase no es arbitraria: es
+`díasDeSuRutaMásExigenteADiseño × consumo × 1,5`. Ese margen de 1,5× se cancela casi
+exacto contra el cubo de la velocidad máxima (1,15³ ≈ 1,52), así que sostener velocidad
+máxima en la ruta más dura de una clase la deja **justo corta** de combustible — hoy la
+única forma de ver un buque quedar **a la deriva** (`status: 'adrift'`, halo rojo, sin
+estela, control de velocidad bloqueado). No hay mecánica de rescate: un buque a la deriva
+se queda ahí. Con la flota y las rutas por defecto esto no ocurre por accidente — solo si
+fuerzas el deslizador al máximo y lo dejas así toda la travesía más exigente de esa clase.
+
+Un dato de proceso: verificar esto por reloj de pared en un Chrome headless salió mal — el
+`requestAnimationFrame` corría ahí a ~1,3 fps (throttling propio del modo headless con
+SwiftShader), muy por debajo de lo que el multiplicador de velocidad hacía suponer. La
+lógica se validó llamando `advance()` directo con horas exactas — 19 aserciones, incluida
+una llamada que cruza llegada + escala completa + reanudar navegación en un solo golpe —
+en vez de confiar en cuánto tiempo real había pasado.
 
 ### El invariante de las rutas, y cómo verificarlo
 
@@ -155,6 +189,7 @@ indistinguible de una que la rodea hasta que pruebas punto por punto.
 
 ## Siguiente
 
-- Modo puerto (atraque, grúas, carga/descarga).
+- Modo puerto (grúas, carga/descarga real — hoy la escala solo reabastece).
 - Que la vista de barco lea el buque seleccionado en el mapa en vez de uno fijo.
-- Economía: fletes, combustible, retrasos por clima en los chokepoints.
+- Mecánica de rescate para un buque a la deriva.
+- Economía: fletes, retrasos por clima en los chokepoints.

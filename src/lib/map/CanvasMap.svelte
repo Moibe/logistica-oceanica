@@ -3,7 +3,7 @@
   import type { GeoProjection, GeoPath } from 'd3-geo';
   import { select } from 'd3-selection';
   import { zoom as d3zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
-  import { position, wakeSpan } from '$lib/domain/fleet';
+  import { fuelFraction, position, wakeSpan } from '$lib/domain/fleet';
   import { PORTS } from '$lib/domain/ports';
   import { pointAt, ROUTES, route, slice } from '$lib/domain/routes';
   import { sim } from '$lib/state/simulation.svelte';
@@ -391,6 +391,10 @@
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     for (const ship of sim.ships) {
+      // A docked or adrift ship isn't making way, so it gets no wake — the
+      // trail would otherwise freeze mid-slice instead of shrinking, which
+      // reads as a rendering bug rather than as "stopped".
+      if (ship.status !== 'sailing') continue;
       const r = route(ship.routeId);
       const [from, to] = wakeSpan(ship, WAKE_KM);
       const pts = slice(r, from, to)
@@ -460,6 +464,16 @@
       const r = route(ship.routeId);
       const isSelected = sim.selectedId === ship.id;
       const isHovered = hoveredId === ship.id;
+      const isDocked = ship.status === 'docked';
+      const isAdrift = ship.status === 'adrift';
+      // A fuel warning only matters while under way — a docked ship is
+      // already headed back to full, and an adrift one has its own colour.
+      const lowFuel = ship.status === 'sailing' && fuelFraction(ship) < 0.2;
+      // Neutral slate for docked rather than a hue — the eight route colours
+      // already span most of the spectrum, and a docked ship needs to read as
+      // "paused" rather than risk landing on top of one of them (an earlier
+      // sky-blue was a near-match for the Golfo-Índico teal).
+      const statusColor = isAdrift ? '#f87171' : isDocked ? '#cbd5e1' : lowFuel ? '#fbbf24' : r.color;
 
       // Screen-space heading, as a central difference around the hull. Both
       // samples come from `pointAt` — the same distance-parameterised helper
@@ -491,41 +505,72 @@
 
         ctx.save();
         ctx.translate(x, s[1]);
-        ctx.rotate(angle);
+        // A docked hull isn't pointing anywhere — it gets a plain disc below
+        // instead of the chevron, so skipping the rotation just avoids an
+        // arrow that would otherwise freeze at whatever angle it arrived on.
+        if (!isDocked) ctx.rotate(angle);
 
-        // Halo.
+        // Halo — tinted for status: cyan alongside, amber under a fuel
+        // warning, red once adrift. Otherwise the usual route colour.
         ctx.globalCompositeOperation = 'lighter';
-        const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, isSelected ? 26 : 16);
-        halo.addColorStop(0, hexToRgba(r.color, isSelected || isHovered ? 0.55 : 0.32));
-        halo.addColorStop(1, hexToRgba(r.color, 0));
+        const haloR = isSelected ? 26 : 16;
+        const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, haloR);
+        halo.addColorStop(0, hexToRgba(statusColor, isSelected || isHovered ? 0.55 : 0.32));
+        halo.addColorStop(1, hexToRgba(statusColor, 0));
         ctx.fillStyle = halo;
         ctx.beginPath();
-        ctx.arc(0, 0, isSelected ? 26 : 16, 0, Math.PI * 2);
+        ctx.arc(0, 0, haloR, 0, Math.PI * 2);
         ctx.fill();
+
+        if (isDocked) {
+          // A slow outward ring stands in for cargo/bunkering activity —
+          // enough to read as "something is happening here" without
+          // animating cranes. Phased by ship id so docked ships don't pulse
+          // in lockstep.
+          const phase = (dockPulsePhase(ship.id) + sim.hours * 0.4) % 1;
+          ctx.strokeStyle = hexToRgba(statusColor, 0.5 * (1 - phase));
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.arc(0, 0, 10 + phase * 14, 0, Math.PI * 2);
+          ctx.stroke();
+        }
         ctx.globalCompositeOperation = 'source-over';
 
-        // Hull: a chevron pointing along the heading.
-        const size = isSelected ? 8 : 6.4;
-        ctx.beginPath();
-        ctx.moveTo(size, 0);
-        ctx.lineTo(-size * 0.72, size * 0.62);
-        ctx.lineTo(-size * 0.36, 0);
-        ctx.lineTo(-size * 0.72, -size * 0.62);
-        ctx.closePath();
-        ctx.fillStyle = '#f2fbff';
-        ctx.fill();
-        ctx.strokeStyle = r.color;
-        ctx.lineWidth = 1.4;
-        ctx.stroke();
+        if (isDocked) {
+          // Parked, not pointing anywhere: a plain disc reads as "stopped"
+          // where the directional chevron would falsely imply it's under way.
+          ctx.beginPath();
+          ctx.arc(0, 0, isSelected ? 6.5 : 5, 0, Math.PI * 2);
+          ctx.fillStyle = '#f2fbff';
+          ctx.fill();
+          ctx.strokeStyle = statusColor;
+          ctx.lineWidth = 1.4;
+          ctx.stroke();
+        } else {
+          // Hull: a chevron pointing along the heading.
+          const size = isSelected ? 8 : 6.4;
+          ctx.beginPath();
+          ctx.moveTo(size, 0);
+          ctx.lineTo(-size * 0.72, size * 0.62);
+          ctx.lineTo(-size * 0.36, 0);
+          ctx.lineTo(-size * 0.72, -size * 0.62);
+          ctx.closePath();
+          ctx.fillStyle = '#f2fbff';
+          ctx.fill();
+          ctx.strokeStyle = statusColor;
+          ctx.lineWidth = 1.4;
+          ctx.stroke();
+        }
         ctx.restore();
 
         if (isSelected || isHovered || k > 2.4) {
+          const suffix = isDocked ? ' · en puerto' : isAdrift ? ' · sin combustible' : '';
           labels.push({
-            text: ship.name,
+            text: ship.name + suffix,
             x: x + 12,
             y: s[1] - 9,
             font: '11px ui-monospace, monospace',
-            color: 'rgba(233, 243, 255, 0.92)',
+            color: isAdrift ? 'rgba(255, 193, 180, 0.95)' : 'rgba(233, 243, 255, 0.92)',
             priority: isSelected ? 1000 : isHovered ? 900 : 500,
           });
         }
@@ -538,6 +583,13 @@
   function hexToRgba(hex: string, alpha: number): string {
     const n = parseInt(hex.slice(1), 16);
     return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+  }
+
+  /** Stable 0..1 offset from a ship's id, so docked ships' pulse rings don't sync up. */
+  function dockPulsePhase(id: string): number {
+    let sum = 0;
+    for (let i = 0; i < id.length; i++) sum += id.charCodeAt(i);
+    return (sum % 100) / 100;
   }
 
   /** Nearest ship to a screen point, within a generous grab radius. */
