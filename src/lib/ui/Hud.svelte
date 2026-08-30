@@ -8,6 +8,7 @@
     fuelFraction,
     fuelBurnPerDay,
     clampSpeedFactor,
+    dockedPortId,
     MIN_SPEED_FACTOR,
     MAX_SPEED_FACTOR,
   } from '$lib/domain/fleet';
@@ -34,6 +35,7 @@
     const remainingKm =
       r.lengthKm * (selected.direction === 1 ? 1 - selected.progress : selected.progress);
     const fraction = fuelFraction(selected);
+    const dockedAt = dockedPortId(selected);
     return {
       route: r,
       lon,
@@ -51,6 +53,11 @@
       fuelCapacity: stats.fuelCapacity,
       burnPerDay: Math.round(fuelBurnPerDay(selected)),
       fuelColor: fraction > 0.5 ? '#4ade80' : fraction > 0.2 ? '#fbbf24' : '#f87171',
+      // Price where the tank is actually filling right now, while docked —
+      // not the port the ship is about to sail toward. Sailing shows the
+      // destination's price instead, as a preview of what the next call will
+      // cost, since that's the port a speed/routing decision can still affect.
+      dockedAtPrice: dockedAt ? port(dockedAt).fuelPrice : null,
     };
   });
 
@@ -64,6 +71,10 @@
     const d = Math.floor(hours / 24);
     const h = Math.round(hours % 24);
     return d > 0 ? `${d}d ${h}h` : `${h}h`;
+  }
+
+  function usd(value: number): string {
+    return `$${Math.round(value).toLocaleString('es-MX')}`;
   }
 
   function onSpeedInput(event: Event) {
@@ -148,6 +159,14 @@
           style:background={detail.fuelColor}
         ></div>
       </div>
+      <p class="fuel-foot label">
+        {#if selected.status === 'docked' && detail.dockedAtPrice !== null}
+          Repostando a {usd(detail.dockedAtPrice)}/t
+        {:else}
+          Precio en {detail.destination.name}: {usd(detail.destination.fuelPrice)}/t
+        {/if}
+      </p>
+      <p class="fuel-spend mono">{usd(selected.fuelSpend)} gastado en combustible</p>
     </div>
 
     <div class="speed">
@@ -398,6 +417,22 @@
     height: 100%;
     border-radius: 4px;
     transition: width 200ms ease;
+  }
+
+  /* Stacked rather than side-by-side with the spend line: at 266px wide,
+     "Repostando a $XXX/t" and "$XXX,XXX gastado" together don't fit on one
+     row, and a shrunk flex item wrapping its text mid-phrase while its
+     sibling's box stretches to match reads as broken layout, not tight
+     spacing. Two full-width lines have room to breathe. */
+  .fuel-foot {
+    margin: 0.4rem 0 0;
+    font-size: 0.66rem;
+  }
+
+  .fuel-spend {
+    margin: 0.2rem 0 0;
+    font-size: 0.66rem;
+    color: var(--muted);
   }
 
   .speed {

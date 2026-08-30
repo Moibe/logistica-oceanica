@@ -1,4 +1,5 @@
 import { bearing, type LonLat } from './geo';
+import { port, type PortId } from './ports';
 import { pointAt, route, type Route, type RouteId } from './routes';
 
 export type ShipClass = 'ulcv' | 'neopanamax' | 'feeder' | 'tanker' | 'bulker';
@@ -141,6 +142,14 @@ export type Ship = {
   /** Fuel level at the moment this dock call started — the low end of the
    *  refuel interpolation in `advance`. Only meaningful while `docked`. */
   fuelAtDock: number;
+  /**
+   * Lifetime spend on bunker fuel, in USD. Accumulated in `advance` as fuel is
+   * actually added while docked, priced at whatever that port charges — so two
+   * ships burning identical fuel on identical routes can carry very different
+   * totals if their ports don't. Never decreases; there is no budget to spend
+   * it against yet, just a running number the HUD shows.
+   */
+  fuelSpend: number;
 };
 
 const KM_PER_NAUTICAL_MILE = 1.852;
@@ -170,7 +179,20 @@ export function createShip(init: {
     speedFactor: init.speedFactor ?? 1,
     dockHoursRemaining: 0,
     fuelAtDock: 0,
+    fuelSpend: 0,
   };
+}
+
+/**
+ * The port a docked ship is currently alongside — the opposite end of its
+ * route from `destination`, since `direction` is flipped at the moment of
+ * arrival (see `advance`), before the dock call even starts. `null` unless
+ * the ship is actually docked; there's no "nearest port" for one under way.
+ */
+export function dockedPortId(ship: Ship): PortId | null {
+  if (ship.status !== 'docked') return null;
+  const r = route(ship.routeId);
+  return ship.direction === 1 ? r.from : r.to;
 }
 
 export function clampSpeedFactor(factor: number): number {
@@ -230,7 +252,17 @@ export function advance(ship: Ship, hours: number): void {
       const step = Math.min(remaining, ship.dockHoursRemaining);
       ship.dockHoursRemaining -= step;
       const done = 1 - ship.dockHoursRemaining / stats.dockHours;
+      const fuelBefore = ship.fuel;
       ship.fuel = ship.fuelAtDock + (stats.fuelCapacity - ship.fuelAtDock) * done;
+      // Priced at whatever THIS port charges, added incrementally as the tank
+      // actually fills — not the port the ship is about to sail toward, and
+      // not the whole refill charged in one lump at the moment it happens to
+      // be checked.
+      const added = ship.fuel - fuelBefore;
+      if (added > 0) {
+        const here = dockedPortId(ship);
+        if (here) ship.fuelSpend += added * port(here).fuelPrice;
+      }
       remaining -= step;
       if (ship.dockHoursRemaining <= 1e-9) {
         ship.fuel = stats.fuelCapacity;

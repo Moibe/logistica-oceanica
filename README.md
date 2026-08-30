@@ -157,6 +157,34 @@ lógica se validó llamando `advance()` directo con horas exactas — 19 asercio
 una llamada que cruza llegada + escala completa + reanudar navegación en un solo golpe —
 en vez de confiar en cuánto tiempo real había pasado.
 
+### Precio de combustible por puerto
+
+En la vida real un buque no repostaba porque se le acabe el tanque — carga para semanas y
+repostea donde el combustible sale barato, en unos pocos puertos que son *hubs* de
+bunkering de verdad (Singapur es el más grande del mundo; Fujairah y Róterdam los otros
+dos grandes en estas rutas). Ese es el porqué detrás de este campo.
+
+Cada `Port` en `ports.ts` lleva un `fuelPrice` (USD/tonelada) que sigue la jerarquía real:
+Singapur y Jebel Ali son los más baratos (~$585-590), Róterdam y Busan un peldaño arriba,
+y los puertos chicos o sin refinería cerca (Sídney, Valparaíso, Durban) hasta 25% más caros
+por tener que traer el combustible en camión o barcaza. Es una foto fija, no un feed —
+el precio real se mueve a diario con el mercado petrolero.
+
+`Ship.fuelSpend` acumula en USD lo gastado en toda su vida, cobrado **por tonelada
+efectivamente añadida** en el momento en que se añade — no al llegar, no al zarpar, sino
+mientras el tanque sube durante la escala. Mismo cuidado que con el combustible: 8
+aserciones directas contra `advance()`, incluida una que reparte la misma escala en
+llamadas de horas dispares y confirma que cobra exactamente lo mismo que hacerlo de un
+tirón.
+
+El HUD muestra el precio del puerto donde está atracado mientras repostea, y el precio del
+puerto **de destino** mientras navega — para que la decisión de velocidad (llegar antes vs.
+quemar menos) se tome sabiendo qué tan caro va a salir el próximo repostaje.
+
+Queda pendiente restringir el repostaje a un subconjunto de puertos-hub reales en vez de
+permitirlo en cualquiera de los dos puertos de cada ruta — eso sí cambiaría cómo se mueven
+los buques, no solo cuánto cuesta, y se decidió dejarlo para después.
+
 ### El invariante de las rutas, y cómo verificarlo
 
 **Ninguna ruta cruza tierra.** Cada punto muestreado se prueba contra
@@ -190,6 +218,8 @@ indistinguible de una que la rodea hasta que pruebas punto por punto.
 ## Siguiente
 
 - Modo puerto (grúas, carga/descarga real — hoy la escala solo reabastece).
+- Restringir el repostaje a puertos-hub reales en vez de a cualquiera de los dos
+  extremos de la ruta (ver «Precio de combustible por puerto» más arriba).
 - Que la vista de barco lea el buque seleccionado en el mapa en vez de uno fijo.
 - Mecánica de rescate para un buque a la deriva.
 - Economía: fletes, retrasos por clima en los chokepoints.
