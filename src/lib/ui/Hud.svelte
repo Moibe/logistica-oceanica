@@ -9,6 +9,8 @@
     fuelBurnPerDay,
     clampSpeedFactor,
     dockedPortId,
+    dockedStop,
+    currentFuelPrice,
     MIN_SPEED_FACTOR,
     MAX_SPEED_FACTOR,
   } from '$lib/domain/fleet';
@@ -36,6 +38,7 @@
       r.lengthKm * (selected.direction === 1 ? 1 - selected.progress : selected.progress);
     const fraction = fuelFraction(selected);
     const dockedAt = dockedPortId(selected);
+    const stopHere = dockedStop(selected);
     return {
       route: r,
       lon,
@@ -53,11 +56,15 @@
       fuelCapacity: stats.fuelCapacity,
       burnPerDay: Math.round(fuelBurnPerDay(selected)),
       fuelColor: fraction > 0.5 ? '#4ade80' : fraction > 0.2 ? '#fbbf24' : '#f87171',
-      // Price where the tank is actually filling right now, while docked —
-      // not the port the ship is about to sail toward. Sailing shows the
-      // destination's price instead, as a preview of what the next call will
-      // cost, since that's the port a speed/routing decision can still affect.
-      dockedAtPrice: dockedAt ? port(dockedAt).fuelPrice : null,
+      // Price and place where the tank is actually filling right now, while
+      // docked — a waypoint stop if it's paused at one, else the cargo port
+      // it's alongside. Sailing shows the destination's price instead, as a
+      // preview of what the next call will cost, since that's the port a
+      // speed/routing decision can still affect.
+      dockedAtPrice: currentFuelPrice(selected),
+      dockedAtName: stopHere ? stopHere.name : dockedAt ? port(dockedAt).name : null,
+      isDockedAtStop: stopHere !== null,
+      stops: r.stops,
     };
   });
 
@@ -82,6 +89,11 @@
     const kn = Number((event.currentTarget as HTMLInputElement).value);
     const designKn = SHIP_CLASS_STATS[selected.shipClass].speed;
     selected.speedFactor = clampSpeedFactor(kn / designKn);
+  }
+
+  function onToggleStop(event: Event) {
+    if (!selected) return;
+    selected.useWaypointStops = (event.currentTarget as HTMLInputElement).checked;
   }
 </script>
 
@@ -127,7 +139,7 @@
 
     {#if selected.status === 'docked'}
       <p class="status is-docked">
-        En puerto · sale en {eta(selected.dockHoursRemaining)}
+        {detail.isDockedAtStop ? 'Parada de repostaje' : 'En puerto'} · sale en {eta(selected.dockHoursRemaining)}
       </p>
     {:else if selected.status === 'adrift'}
       <p class="status is-adrift">A la deriva · sin combustible</p>
@@ -161,12 +173,21 @@
       </div>
       <p class="fuel-foot label">
         {#if selected.status === 'docked' && detail.dockedAtPrice !== null}
-          Repostando a {usd(detail.dockedAtPrice)}/t
+          Repostando en {detail.dockedAtName} a {usd(detail.dockedAtPrice)}/t
         {:else}
           Precio en {detail.destination.name}: {usd(detail.destination.fuelPrice)}/t
         {/if}
       </p>
       <p class="fuel-spend mono">{usd(selected.fuelSpend)} gastado en combustible</p>
+
+      {#if detail.stops.length > 0}
+        <label class="stop-toggle">
+          <input type="checkbox" checked={selected.useWaypointStops} onchange={onToggleStop} />
+          <span class="label">
+            Repostar en tránsito ({detail.stops.map((s) => s.name).join(', ')})
+          </span>
+        </label>
+      {/if}
     </div>
 
     <div class="speed">
@@ -435,6 +456,24 @@
     margin: 0.2rem 0 0;
     font-size: 0.66rem;
     color: var(--muted);
+  }
+
+  .stop-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    margin-top: 0.55rem;
+    cursor: pointer;
+  }
+
+  .stop-toggle input {
+    margin-top: 0.15rem;
+    accent-color: var(--accent);
+    flex: none;
+  }
+
+  .stop-toggle .label {
+    line-height: 1.4;
   }
 
   .speed {

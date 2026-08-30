@@ -102,7 +102,6 @@ const SEA = {
   socotraN: [53.0, 14.5],
 
   // --- Arabian Sea and the Gulf --------------------------------------------
-  gulfNE: [55.5, 26.5],
   hormuz: [56.6, 26.9],
   gulfOfOman: [58.8, 24.0],
   rasAlHadd: [60.2, 22.4],
@@ -181,7 +180,20 @@ type RouteSpec = {
   via: Mark[];
   /** Line colour on every renderer. Kept on the route so the three views match. */
   color: string;
+  /** Fuel-only stops along this lane — see `BunkerStop`. Most routes have none. */
+  stops?: StopSpec[];
 };
+
+/**
+ * A fuel-only stop is specified one of two ways: `bunker` points at a real
+ * `Port` (Fujairah) and pulls its name/price/position from there, so the two
+ * never drift apart; `anchorage` is inline because there's no port behind it
+ * to look up — a ship-to-ship bunkering area has no city, no country, nothing
+ * but a spot on the chart.
+ */
+type StopSpec =
+  | { kind: 'bunker'; portId: PortId }
+  | { kind: 'anchorage'; id: string; name: string; fuelPrice: number; at: LonLat };
 
 const SPECS: RouteSpec[] = [
   {
@@ -197,6 +209,12 @@ const SPECS: RouteSpec[] = [
       'suezCanal', 'portSaid', 'medE', 'medC', 'sicilyCh', 'algeriaOff', 'medW',
       'alboran', 'gibraltar', 'capeStVincent', 'iberiaW',
       'finisterre', 'biscayW', 'ushant', 'channelW', 'dover', 'northSea',
+    ],
+    // Algeciras Bay, right at the strait this lane already threads through, is
+    // one of the busiest ship-to-ship bunkering anchorages in the world — no
+    // detour needed, the ship is passing directly over it either way.
+    stops: [
+      { kind: 'anchorage', id: 'gibraltar-anchorage', name: 'Fondeadero de Gibraltar', fuelPrice: 592, at: [-5.35, 36.13] },
     ],
   },
   {
@@ -269,10 +287,15 @@ const SPECS: RouteSpec[] = [
     from: 'jebelali',
     to: 'durban',
     color: '#22d3ee',
+    // Routed straight through Fujairah rather than the old approximate
+    // mid-Gulf mark: real traffic leaving the Gulf for Hormuz hugs this coast,
+    // and it's also this lane's bunker stop, so the geometry should agree with
+    // the price it charges.
     via: [
-      'gulfNE', 'hormuz', 'gulfOfOman', 'rasAlHadd', 'omanE', 'arabianSeaC', 'somaliaE',
+      'fujairah', 'hormuz', 'gulfOfOman', 'rasAlHadd', 'omanE', 'arabianSeaC', 'somaliaE',
       'kenyaOff', 'tanzaniaOff', 'mozambiqueCh', 'mozambiqueS',
     ],
+    stops: [{ kind: 'bunker', portId: 'fujairah' }],
   },
   {
     id: 'west-coast',
@@ -290,6 +313,23 @@ const SPECS: RouteSpec[] = [
   },
 ];
 
+/**
+ * A fuel-only stop, resolved onto a specific route's geometry. `kind: 'bunker'`
+ * is a real named port whose business is overwhelmingly fuel (Fujairah);
+ * `kind: 'anchorage'` is open water with no port identity at all — a
+ * ship-to-ship bunkering area, nothing more. Either way `atProgress` is where
+ * along *this* route's polyline it sits, so a ship can stop there without any
+ * detour: it's a point already on the path it sails.
+ */
+export type BunkerStop = {
+  id: string;
+  name: string;
+  kind: 'bunker' | 'anchorage';
+  fuelPrice: number;
+  at: LonLat;
+  atProgress: number;
+};
+
 export type Route = {
   id: RouteId;
   name: string;
@@ -301,10 +341,44 @@ export type Route = {
   /** Cumulative km at each point; the last entry is the total length. */
   cumulative: number[];
   lengthKm: number;
+  /** Fuel-only stops along this lane. Empty for most routes. */
+  stops: BunkerStop[];
 };
 
 /** One sample every ~120 km, so even a hard zoom shows a curve and not a chord. */
 const SAMPLE_KM = 120;
+
+/**
+ * Progress (0..1) of whichever sampled point lands closest to `target`. Exact
+ * for a stop built from a via-point that's already in `points` (Fujairah);
+ * approximate — to within about half a sample spacing, ~60 km — for one that
+ * isn't (the Gibraltar anchorage), which is a fair description of "somewhere
+ * in this bay" anyway.
+ */
+function nearestProgress(points: LonLat[], cumulative: number[], lengthKm: number, target: LonLat): number {
+  let bestI = 0;
+  let bestKm = Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const d = distanceKm(points[i], target);
+    if (d < bestKm) {
+      bestKm = d;
+      bestI = i;
+    }
+  }
+  return lengthKm > 0 ? cumulative[bestI] / lengthKm : 0;
+}
+
+function buildStop(spec: StopSpec, points: LonLat[], cumulative: number[], lengthKm: number): BunkerStop {
+  const at = spec.kind === 'bunker' ? port(spec.portId).at : spec.at;
+  return {
+    id: spec.kind === 'bunker' ? spec.portId : spec.id,
+    name: spec.kind === 'bunker' ? port(spec.portId).name : spec.name,
+    kind: spec.kind,
+    fuelPrice: spec.kind === 'bunker' ? port(spec.portId).fuelPrice : spec.fuelPrice,
+    at,
+    atProgress: nearestProgress(points, cumulative, lengthKm, at),
+  };
+}
 
 function buildRoute(spec: RouteSpec): Route {
   const marks: LonLat[] = [port(spec.from).at, ...spec.via.map(markAt), port(spec.to).at];
@@ -322,6 +396,7 @@ function buildRoute(spec: RouteSpec): Route {
   for (let i = 1; i < points.length; i++) {
     cumulative.push(cumulative[i - 1] + distanceKm(points[i - 1], points[i]));
   }
+  const lengthKm = cumulative[cumulative.length - 1];
 
   return {
     id: spec.id,
@@ -331,7 +406,8 @@ function buildRoute(spec: RouteSpec): Route {
     color: spec.color,
     points,
     cumulative,
-    lengthKm: cumulative[cumulative.length - 1],
+    lengthKm,
+    stops: (spec.stops ?? []).map((s) => buildStop(s, points, cumulative, lengthKm)),
   };
 }
 

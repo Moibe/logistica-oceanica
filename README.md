@@ -157,33 +157,65 @@ lógica se validó llamando `advance()` directo con horas exactas — 19 asercio
 una llamada que cruza llegada + escala completa + reanudar navegación en un solo golpe —
 en vez de confiar en cuánto tiempo real había pasado.
 
-### Precio de combustible por puerto
+### Precio de combustible por puerto, y los tres tipos reales de escala
 
 En la vida real un buque no repostaba porque se le acabe el tanque — carga para semanas y
-repostea donde el combustible sale barato, en unos pocos puertos que son *hubs* de
-bunkering de verdad (Singapur es el más grande del mundo; Fujairah y Róterdam los otros
-dos grandes en estas rutas). Ese es el porqué detrás de este campo.
+repostea donde el combustible sale barato. Pero "barato" no vive solo en los puertos de
+carga: existen tres categorías reales, y el juego las modela como tres cosas distintas en
+vez de una sola.
 
-Cada `Port` en `ports.ts` lleva un `fuelPrice` (USD/tonelada) que sigue la jerarquía real:
-Singapur y Jebel Ali son los más baratos (~$585-590), Róterdam y Busan un peldaño arriba,
-y los puertos chicos o sin refinería cerca (Sídney, Valparaíso, Durban) hasta 25% más caros
-por tener que traer el combustible en camión o barcaza. Es una foto fija, no un feed —
-el precio real se mueve a diario con el mercado petrolero.
+1. **Puerto completo** — carga y repostaje al mismo tiempo. Es casi todos los puertos del
+   mundo, porque el combustible es un servicio que sigue al tráfico: donde hay barcos, hay
+   proveedor. Los 14 `Port` con `kind: 'full'` en `ports.ts`.
+2. **Puerto de repostaje dominante** — un lugar con nombre, ciudad y algo de carga, pero
+   cuyo negocio real es casi todo combustible. **Fujairah** (Emiratos) es el ejemplo de
+   libro: uno de los tres puertos con mayor volumen de bunkering del planeta, precisamente
+   porque está justo fuera del Estrecho de Ormuz — un barco puede repostar ahí sin meterse
+   al Golfo Pérsico y salir. `kind: 'bunker'` en `ports.ts`, `teu: 0.3` (para que el punto en
+   el mapa salga chico) y un diamante ámbar en vez del punto cian de siempre. La ruta
+   Golfo–Índico pasa literalmente por sus coordenadas — se corrigió el via-point aproximado
+   que había ahí antes por el puerto real, así la geometría concuerda con el precio que cobra.
+3. **Fondeadero, sin identidad de puerto** — repostaje ship-to-ship en aguas abiertas: una
+   barcaza de combustible se arrima al barco anclado, sin terminal, sin ciudad, sin nada.
+   La bahía de Gibraltar es de las zonas de bunkering ship-to-ship más transitadas del
+   mundo, y la ruta Asia–Europa ya pasa justo por ahí. Es un `BunkerStop` con
+   `kind: 'anchorage'` en `routes.ts` — no existe como `Port`, solo como un punto sobre la
+   geometría de esa ruta específica (diamante ámbar hueco en el mapa, para diferenciarlo del
+   relleno de Fujairah).
+
+Ni Fujairah ni el fondeadero de Gibraltar exigen desvío: sus coordenadas se colocan sobre
+la polilínea que la ruta ya recorre (`BunkerStop.atProgress`, calculado buscando el punto
+muestreado más cercano a la posición real — exacto para Fujairah, que ahora es un via-point
+en sí mismo; ~37 km de margen para Gibraltar, razonable para "en algún lugar de esta bahía").
+
+Cada `Port` lleva un `fuelPrice` (USD/tonelada) que sigue la jerarquía real: Singapur y
+Fujairah son los más baratos (~$578-585), Róterdam y el fondeadero de Gibraltar un peldaño
+arriba (~$592-600), y los puertos chicos o sin refinería cerca (Sídney, Valparaíso, Durban)
+hasta 25% más caros por tener que traer el combustible en camión o barcaza. Es una foto
+fija, no un feed — el precio real se mueve a diario con el mercado petrolero.
+
+Parar en un fondeadero o en Fujairah es **decisión del jugador**, no automática:
+`Ship.useWaypointStops` (casilla en el panel del buque, solo visible si su ruta tiene
+alguna parada) — por defecto en falso, así que un barco navega derecho salvo que actives la
+casilla. Activarla cuesta `BUNKER_STOP_HOURS` (6 h, una sola cifra para todas las clases: a
+diferencia de la carga, bombear combustible no depende del tamaño del barco, depende del
+caudal de la bomba — 4-12 h es el rango real, 6 es un punto medio representativo) a cambio
+de repostar al precio de esa parada en vez de esperar al puerto de destino.
 
 `Ship.fuelSpend` acumula en USD lo gastado en toda su vida, cobrado **por tonelada
 efectivamente añadida** en el momento en que se añade — no al llegar, no al zarpar, sino
-mientras el tanque sube durante la escala. Mismo cuidado que con el combustible: 8
-aserciones directas contra `advance()`, incluida una que reparte la misma escala en
-llamadas de horas dispares y confirma que cobra exactamente lo mismo que hacerlo de un
-tirón.
+mientras el tanque sube durante la escala, sea puerto o parada. El HUD muestra el precio de
+donde esté repostando ahora mismo (puerto o parada) y, mientras navega, el del puerto
+**de destino** — para que la decisión de velocidad (llegar antes vs. quemar menos) se tome
+sabiendo qué tan caro va a salir el próximo repostaje.
 
-El HUD muestra el precio del puerto donde está atracado mientras repostea, y el precio del
-puerto **de destino** mientras navega — para que la decisión de velocidad (llegar antes vs.
-quemar menos) se tome sabiendo qué tan caro va a salir el próximo repostaje.
-
-Queda pendiente restringir el repostaje a un subconjunto de puertos-hub reales en vez de
-permitirlo en cualquiera de los dos puertos de cada ruta — eso sí cambiaría cómo se mueven
-los buques, no solo cuánto cuesta, y se decidió dejarlo para después.
+Verificado con 48 aserciones directas contra `advance()` en total (19 del ciclo
+puerto/combustible original + 8 del costeo + 21 de la parada intermedia), incluida la
+llamada que cruza en un solo golpe *llegar a la parada → agotar toda la escala → seguir
+navegando*. Dos de esas aserciones fallaron en el primer intento por el mismo motivo de
+antes: pruebas viejas construían un buque `'docked'` a mano sin fijar el campo nuevo
+`dockHoursTotal` que la generalización requiere — el bug estaba en la prueba, no en
+`advance()`.
 
 ### El invariante de las rutas, y cómo verificarlo
 
@@ -218,8 +250,7 @@ indistinguible de una que la rodea hasta que pruebas punto por punto.
 ## Siguiente
 
 - Modo puerto (grúas, carga/descarga real — hoy la escala solo reabastece).
-- Restringir el repostaje a puertos-hub reales en vez de a cualquiera de los dos
-  extremos de la ruta (ver «Precio de combustible por puerto» más arriba).
+- Más paradas de repostaje reales en otras rutas (hoy solo Fujairah y Gibraltar).
 - Que la vista de barco lea el buque seleccionado en el mapa en vez de uno fijo.
 - Mecánica de rescate para un buque a la deriva.
 - Economía: fletes, retrasos por clima en los chokepoints.

@@ -427,31 +427,67 @@
     ctx.globalCompositeOperation = 'source-over';
 
     // ---- ports ----------------------------------------------------------
+    // Cargo ports are the cyan-white dot they've always been. A 'bunker' port
+    // (Fujairah) gets a distinct amber diamond instead — the shape is the same
+    // visual language the fuel-only waypoint stops use below, so the two real
+    // "just here for fuel" categories read as one family on the map.
     for (const p of PORTS) {
       const s = toScreen(p.at);
       if (!s) continue;
-      const radius = 1.7 + Math.sqrt(p.teu) * 0.34;
+      const isBunker = p.kind === 'bunker';
+      const radius = isBunker ? 3 : 1.7 + Math.sqrt(p.teu) * 0.34;
       for (const dx of shifts) {
         const x = s[0] + dx;
         if (x < -40 || x > width + 40 || s[1] < -40 || s[1] > height + 40) continue;
-        ctx.beginPath();
-        ctx.arc(x, s[1], radius, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(200, 236, 255, 0.9)';
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(x, s[1], radius + 3, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(140, 205, 255, 0.35)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
+        if (isBunker) {
+          drawFuelMark(ctx, x, s[1], radius, true);
+        } else {
+          ctx.beginPath();
+          ctx.arc(x, s[1], radius, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(200, 236, 255, 0.9)';
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(x, s[1], radius + 3, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(140, 205, 255, 0.35)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
         if (k > 1.6 || p.teu > 8) {
           labels.push({
             text: p.name.toUpperCase(),
             x: x + radius + 6,
             y: s[1] + 3,
             font: '10px ui-monospace, monospace',
-            color: 'rgba(200, 226, 250, 0.72)',
+            color: isBunker ? 'rgba(251, 191, 36, 0.8)' : 'rgba(200, 226, 250, 0.72)',
             priority: p.teu,
           });
+        }
+      }
+    }
+
+    // ---- fuel-only waypoint stops (anchorages, no port behind them) -----
+    // Drawn as a hollow version of the same amber diamond, since there's no
+    // city here to fill it in with — just a spot on the chart a ship can
+    // choose to pause at.
+    for (const r of ROUTES) {
+      for (const stop of r.stops) {
+        if (stop.kind !== 'anchorage') continue;
+        const s = toScreen(stop.at);
+        if (!s) continue;
+        for (const dx of shifts) {
+          const x = s[0] + dx;
+          if (x < -40 || x > width + 40 || s[1] < -40 || s[1] > height + 40) continue;
+          drawFuelMark(ctx, x, s[1], 3, false);
+          if (k > 2.2) {
+            labels.push({
+              text: stop.name.toUpperCase(),
+              x: x + 9,
+              y: s[1] + 3,
+              font: '9px ui-monospace, monospace',
+              color: 'rgba(251, 191, 36, 0.65)',
+              priority: 1,
+            });
+          }
         }
       }
     }
@@ -590,6 +626,28 @@
     let sum = 0;
     for (let i = 0; i < id.length; i++) sum += id.charCodeAt(i);
     return (sum % 100) / 100;
+  }
+
+  /**
+   * The shared marker for anything that's here purely for fuel: filled for a
+   * real bunker port (Fujairah), hollow for an anchorage with no port behind
+   * it at all — same amber, same shape, so the two read as one family rather
+   * than two unrelated map elements.
+   */
+  function drawFuelMark(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, filled: boolean) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - r);
+    ctx.lineTo(x + r, y);
+    ctx.lineTo(x, y + r);
+    ctx.lineTo(x - r, y);
+    ctx.closePath();
+    if (filled) {
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.85)';
+      ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.9)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
   }
 
   /** Nearest ship to a screen point, within a generous grab radius. */
