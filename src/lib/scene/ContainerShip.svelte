@@ -59,6 +59,14 @@
 
   const DECK_Y = 1.8;
   const KEEL_Y = -3.2;
+  /**
+   * The hull's extrude bevel. Not just a rounding detail — `bevelSize` pushes
+   * the extruded body OUTWARD, so the hull's real side sits at
+   * `BEAM/2 + HULL_BEVEL`, not at `BEAM/2`. Anything mounted flush on the hull
+   * has to use this or it ends up buried inside the mesh; that is exactly the
+   * bug that hid the name plate. Shared here so the two can't drift apart.
+   */
+  const HULL_BEVEL = 0.35;
   const UNIT = LOA / 400; // world units per metre
 
   // ---- hull ---------------------------------------------------------------
@@ -81,8 +89,8 @@
     const geo = new ExtrudeGeometry(shape, {
       depth: DECK_Y - KEEL_Y,
       bevelEnabled: true,
-      bevelThickness: 0.35,
-      bevelSize: 0.35,
+      bevelThickness: HULL_BEVEL,
+      bevelSize: HULL_BEVEL,
       bevelSegments: 2,
       curveSegments: 12,
     });
@@ -261,36 +269,40 @@
 
   // ---- name plate -----------------------------------------------------
   // Painted on the hull the way a real ship's name is, rather than only in a
-  // HUD overlay. Position alternates bow/stern per ship — hashed from the name
-  // itself, so it's stable across reloads and different from one ship to the
-  // next without any extra configuration.
+  // HUD overlay. Which of three positions along the starboard side it lands on
+  // is hashed from the name itself — stable across reloads, different from one
+  // ship to the next, no per-ship configuration.
   //
-  // The two placements are mounted completely differently, not just at two
-  // different Z values along the same hull side:
-  //   - bow: side-mounted on the starboard hull. The hull's own shape() curve
-  //     only holds full beam for z roughly in [-0.25, +0.39] × LOA — anywhere
-  //     closer to either tip is already narrowing, which would leave a flat
-  //     plate floating visibly clear of the actual (curved) surface there.
-  //   - stern: mounted just past the TRANSOM instead of on the hull side. An
-  //     earlier version put it at z=+0.4×LOA on the side, which is exactly
-  //     where the deckhouse sits (z=0.355×LOA ± 1.8) — from the default
-  //     camera the opaque deckhouse box hid every letter except the one that
-  //     happened to land past its aft edge (reported: "MSC Polaris" showing
-  //     only the M). A second pass mounted it flush on the transom facing
-  //     straight aft (+Z), clear of the deckhouse — correct, but none of the
-  //     camera presets look from behind, so a plane facing straight aft sat
-  //     nearly edge-on to all of them and was simply invisible. It's now
-  //     angled 45° toward starboard-aft, which is roughly where the default
-  //     "quarter" camera actually is.
+  // All three slots are SIDE-mounted inside the hull's parallel mid-body. That
+  // band is where `shape()` holds full beam — world z in [-0.25, +0.39] x LOA;
+  // outside it the hull is already curving inward, so a flat plate there either
+  // floats visibly off the surface or sinks into it. Both real placements on a
+  // ship are covered by this: the name near the bow, and the operator name in
+  // large letters amidships, which is exactly what a container line paints on
+  // the side of a box boat.
   //
-  // Only the starboard side and the transom are covered, not the port side:
-  // that would need a second, deliberately mirrored texture rather than the
-  // same one flipped, or the lettering reads backwards.
+  // Two earlier attempts at a STERN placement are worth not repeating:
+  //   1. Side-mounted at z=+0.4 x LOA — past the full-beam band, into the stern
+  //      taper, and only ~0.03 units off the hull. Reported as "MSC Polaris
+  //      shows only the M".
+  //   2. Mounted past the transom and angled 45 degrees so it would face the
+  //      default camera. Measured afterwards: the rotation swings one end of
+  //      the plate back INTO the tapering hull (x 3.01 vs hull half-width 3.59
+  //      at that z) and the other end out past the transom into open air —
+  //      half the lettering buried, half floating.
+  // The clearance below is also deliberately ~5x the old one: at 0.03 units the
+  // plate and the hull side are close enough to z-fight at this camera range.
+  //
+  // Starboard (+X) only, not port: the other side would need a separately
+  // mirrored texture rather than this one flipped, or the lettering reads
+  // backwards.
+  const NAMEPLATE_SLOTS = [-0.15, 0.04, 0.24];
+  const NAMEPLATE_CLEARANCE = 0.06;
+
   const namePlate = NAME
     ? (() => {
         let hash = 0;
         for (let i = 0; i < NAME.length; i++) hash += NAME.charCodeAt(i);
-        const atBow = hash % 2 === 0;
 
         const canvas = document.createElement('canvas');
         canvas.width = 512;
@@ -300,45 +312,49 @@
         ctx.fillStyle = '#eef3f8';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+
+        // Fit against the string that is actually DRAWN. The loop used to
+        // measure `NAME` but draw `NAME.toUpperCase()`, and uppercase Arial is
+        // much wider — measured across this fleet, 6 of 9 names overflowed the
+        // canvas by 4-18 px per side and were silently clipped at its edges,
+        // independently of anything happening in 3D.
+        const text = NAME.toUpperCase();
         let fontSize = 66;
         ctx.font = `700 ${fontSize}px Arial, sans-serif`;
-        while (ctx.measureText(NAME).width > canvas.width * 0.92 && fontSize > 20) {
+        while (ctx.measureText(text).width > canvas.width * 0.9 && fontSize > 18) {
           fontSize -= 2;
           ctx.font = `700 ${fontSize}px Arial, sans-serif`;
         }
-        ctx.fillText(NAME.toUpperCase(), canvas.width / 2, canvas.height / 2 + 2);
+        ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 2);
 
         const texture = new CanvasTexture(canvas);
         texture.colorSpace = SRGBColorSpace;
         texture.needsUpdate = true;
+        // Deliberately plain. An attempt to harden this against z-fighting with
+        // `depthWrite: false` + `polygonOffset` made the plate vanish entirely
+        // in every view — bisected to the material, since the position moved by
+        // only 0.12 units in the same change. The generous physical clearance
+        // below (5x the original) is what keeps it off the hull surface now.
         const material = new MeshBasicMaterial({ map: texture, transparent: true });
 
-        if (atBow) {
-          const width = LOA * 0.16;
-          const height = (width * canvas.height) / canvas.width;
-          const geometry = new PlaneGeometry(width, height);
-          // Default plane normal is +Z with width along local X; rotate so
-          // the normal faces outward (+X, starboard) and width runs along
-          // world Z (the ship's length) instead.
-          geometry.rotateY(Math.PI / 2);
-          const position: [number, number, number] = [BEAM / 2 + 0.03, 0.9, -LOA * 0.15];
-          return { geometry, material, position };
-        }
-
-        // The stern taper narrows to 0.62×halfBeam by the transom, so the
-        // plate is sized to that, not the full beam.
-        const width = BEAM * 0.5;
+        const width = LOA * 0.14;
         const height = (width * canvas.height) / canvas.width;
         const geometry = new PlaneGeometry(width, height);
-        // A plane facing straight aft (+Z, no rotation) sits nearly edge-on to
-        // every camera preset here — none of them look from directly behind —
-        // so it rendered correctly but was invisible in practice. Angling it
-        // 45° toward starboard-aft instead points its face roughly at where
-        // the default "quarter" camera actually is, while staying anchored
-        // just past the hull's own stern tip — outside the hull entirely, so
-        // there's no taper geometry to match the way the bow mount has to.
-        geometry.rotateY(Math.PI / 4);
-        const position: [number, number, number] = [BEAM * 0.15, 0.9, LOA / 2 + 0.08];
+        // Default plane normal is +Z with width along local X; rotate so the
+        // normal faces outward (+X, starboard) and width runs along world Z
+        // (the ship's length) instead.
+        geometry.rotateY(Math.PI / 2);
+
+        const z = LOA * NAMEPLATE_SLOTS[hash % NAMEPLATE_SLOTS.length];
+        // Measured, not assumed: the hull's main body sits at
+        // `BEAM/2 + HULL_BEVEL` for all y in [KEEL_Y, DECK_Y], tapering back to
+        // BEAM/2 only at the very rim. y=0.85 with this plate height is well
+        // inside that band on every class.
+        const position: [number, number, number] = [
+          BEAM / 2 + HULL_BEVEL + NAMEPLATE_CLEARANCE,
+          0.85,
+          z,
+        ];
         return { geometry, material, position };
       })()
     : null;
