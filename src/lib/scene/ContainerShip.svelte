@@ -260,22 +260,37 @@
   const houseZ = LOA * 0.355;
 
   // ---- name plate -----------------------------------------------------
-  // Painted on the hull side the way a real ship's name is, rather than only
-  // in a HUD overlay. Position alternates bow/stern per ship — hashed from the
-  // name itself, so it's stable across reloads and different from one ship to
-  // the next without any extra configuration. Drawn on the starboard (+X)
-  // side only for now: that's the side the default "quarter" camera shows, and
-  // doing the port side too would need a second, deliberately mirrored texture
-  // rather than the same one flipped, or the lettering reads backwards.
+  // Painted on the hull the way a real ship's name is, rather than only in a
+  // HUD overlay. Position alternates bow/stern per ship — hashed from the name
+  // itself, so it's stable across reloads and different from one ship to the
+  // next without any extra configuration.
+  //
+  // The two placements are mounted completely differently, not just at two
+  // different Z values along the same hull side:
+  //   - bow: side-mounted on the starboard hull. The hull's own shape() curve
+  //     only holds full beam for z roughly in [-0.25, +0.39] × LOA — anywhere
+  //     closer to either tip is already narrowing, which would leave a flat
+  //     plate floating visibly clear of the actual (curved) surface there.
+  //   - stern: mounted just past the TRANSOM instead of on the hull side. An
+  //     earlier version put it at z=+0.4×LOA on the side, which is exactly
+  //     where the deckhouse sits (z=0.355×LOA ± 1.8) — from the default
+  //     camera the opaque deckhouse box hid every letter except the one that
+  //     happened to land past its aft edge (reported: "MSC Polaris" showing
+  //     only the M). A second pass mounted it flush on the transom facing
+  //     straight aft (+Z), clear of the deckhouse — correct, but none of the
+  //     camera presets look from behind, so a plane facing straight aft sat
+  //     nearly edge-on to all of them and was simply invisible. It's now
+  //     angled 45° toward starboard-aft, which is roughly where the default
+  //     "quarter" camera actually is.
+  //
+  // Only the starboard side and the transom are covered, not the port side:
+  // that would need a second, deliberately mirrored texture rather than the
+  // same one flipped, or the lettering reads backwards.
   const namePlate = NAME
     ? (() => {
         let hash = 0;
         for (let i = 0; i < NAME.length; i++) hash += NAME.charCodeAt(i);
         const atBow = hash % 2 === 0;
-        // Both land in the hull's parallel mid-body (full beam, no bow/stern
-        // taper), so the plate sits flush against a flat run of hull side
-        // rather than floating off a curved section.
-        const z = atBow ? -LOA * 0.32 : LOA * 0.4;
 
         const canvas = document.createElement('canvas');
         canvas.width = 512;
@@ -296,17 +311,35 @@
         const texture = new CanvasTexture(canvas);
         texture.colorSpace = SRGBColorSpace;
         texture.needsUpdate = true;
+        const material = new MeshBasicMaterial({ map: texture, transparent: true });
 
-        const width = LOA * 0.16;
+        if (atBow) {
+          const width = LOA * 0.16;
+          const height = (width * canvas.height) / canvas.width;
+          const geometry = new PlaneGeometry(width, height);
+          // Default plane normal is +Z with width along local X; rotate so
+          // the normal faces outward (+X, starboard) and width runs along
+          // world Z (the ship's length) instead.
+          geometry.rotateY(Math.PI / 2);
+          const position: [number, number, number] = [BEAM / 2 + 0.03, 0.9, -LOA * 0.15];
+          return { geometry, material, position };
+        }
+
+        // The stern taper narrows to 0.62×halfBeam by the transom, so the
+        // plate is sized to that, not the full beam.
+        const width = BEAM * 0.5;
         const height = (width * canvas.height) / canvas.width;
         const geometry = new PlaneGeometry(width, height);
-        // Default plane normal is +Z with width along local X; rotate so the
-        // normal faces outward (+X, starboard) and width runs along world Z
-        // (the ship's length) instead.
-        geometry.rotateY(Math.PI / 2);
-
-        const material = new MeshBasicMaterial({ map: texture, transparent: true });
-        return { z, geometry, material };
+        // A plane facing straight aft (+Z, no rotation) sits nearly edge-on to
+        // every camera preset here — none of them look from directly behind —
+        // so it rendered correctly but was invisible in practice. Angling it
+        // 45° toward starboard-aft instead points its face roughly at where
+        // the default "quarter" camera actually is, while staying anchored
+        // just past the hull's own stern tip — outside the hull entirely, so
+        // there's no taper geometry to match the way the bow mount has to.
+        geometry.rotateY(Math.PI / 4);
+        const position: [number, number, number] = [BEAM * 0.15, 0.9, LOA / 2 + 0.08];
+        return { geometry, material, position };
       })()
     : null;
 
@@ -404,7 +437,7 @@
     <T.Mesh
       geometry={namePlate.geometry}
       material={namePlate.material}
-      position={[BEAM / 2 + 0.03, 0.9, namePlate.z]}
+      position={namePlate.position}
     />
   {/if}
 </T.Group>
