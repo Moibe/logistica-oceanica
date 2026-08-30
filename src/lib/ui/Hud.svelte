@@ -189,6 +189,8 @@
         {#if selected.status === 'docked'}· al zarpar{/if}
       </p>
     </div>
+
+    <a class="ctl goto" href="/ship">Ir a Barco →</a>
   </section>
 {/if}
 
@@ -460,6 +462,12 @@
 
   .burn {
     margin: 0.35rem 0 0;
+  }
+
+  .goto {
+    margin-top: 0.85rem;
+    width: 100%;
+    justify-content: center;
   }
 
   .clock {
