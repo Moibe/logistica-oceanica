@@ -22,6 +22,15 @@ export type ShipClassStats = {
   unit: 'TEU' | 't';
   /** Length overall in metres — the 3D scene scales the hull from this. */
   loa: number;
+  /**
+   * Beam (width) in metres, from real hulls of the class — not a fixed
+   * fraction of `loa`. Tankers and bulkers run proportionally beamier than
+   * box boats of similar length (a VLCC-class tanker at 333 m is nearly as
+   * wide as a 400 m ULCV), which is part of why the 3D scene draws each class
+   * as a visibly different shape rather than one hull resized by a single
+   * factor.
+   */
+  beam: number;
   /** Bunker tank size in tonnes of fuel oil. See the derivation note below. */
   fuelCapacity: number;
   /** Burn rate in tonnes/day AT DESIGN SPEED. Actual burn scales with the cube
@@ -71,6 +80,7 @@ export const SHIP_CLASS_STATS: Record<ShipClass, ShipClassStats> = {
     capacity: 24000,
     unit: 'TEU',
     loa: 400,
+    beam: 61.5, // e.g. the Ever Given / HMM Algeciras class
     fuelBurnRate: 220,
     fuelCapacity: 7100, // 21.6 d (asia-europe) × 220 t/d × 1.5
     dockHours: 30,
@@ -83,6 +93,7 @@ export const SHIP_CLASS_STATS: Record<ShipClass, ShipClassStats> = {
     capacity: 14000,
     unit: 'TEU',
     loa: 366,
+    beam: 49.0, // built right at the 2016 lock limit (51.25 m), not past it
     fuelBurnRate: 180,
     fuelCapacity: 6000, // 22.3 d (panama, its harder lane) × 180 t/d × 1.5
     dockHours: 24,
@@ -93,6 +104,7 @@ export const SHIP_CLASS_STATS: Record<ShipClass, ShipClassStats> = {
     capacity: 2500,
     unit: 'TEU',
     loa: 180,
+    beam: 28.4,
     fuelBurnRate: 35,
     fuelCapacity: 520, // 10.0 d (oceania, its harder lane) × 35 t/d × 1.5
     dockHours: 12,
@@ -103,6 +115,7 @@ export const SHIP_CLASS_STATS: Record<ShipClass, ShipClassStats> = {
     capacity: 320000,
     unit: 't',
     loa: 333,
+    beam: 60.0, // VLCC-class — proportionally the beamiest hull in the fleet
     fuelBurnRate: 90,
     fuelCapacity: 1540, // 11.4 d (gulf-india) × 90 t/d × 1.5
     dockHours: 16,
@@ -113,6 +126,7 @@ export const SHIP_CLASS_STATS: Record<ShipClass, ShipClassStats> = {
     capacity: 180000,
     unit: 't',
     loa: 292,
+    beam: 45.0, // Capesize-class
     fuelBurnRate: 42,
     fuelCapacity: 1700, // 27.1 d (cape, its harder lane) × 42 t/d × 1.5
     dockHours: 28,

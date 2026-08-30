@@ -22,7 +22,6 @@
   // it was wired to the fleet.
   const ship = $derived(sim.selected);
   const stats = $derived(ship ? SHIP_CLASS_STATS[ship.shipClass] : null);
-  const scale = $derived(stats ? stats.loa / 400 : 1);
 </script>
 
 <svelte:head>
@@ -31,7 +30,13 @@
 
 <div class="host">
   <Canvas>
-    <ShipScene {cameraPreset} {scale} />
+    <!-- Keyed by ship id: ContainerShip reads its size/class/name props once
+         at mount for performance (see its own note), so switching the
+         selected ship without leaving this page needs a fresh instance, not
+         just new prop values on the old one, or the hull never changes. -->
+    {#key ship?.id}
+      <ShipScene {cameraPreset} shipClass={ship?.shipClass ?? 'ulcv'} name={ship?.name ?? ''} />
+    {/key}
   </Canvas>
 </div>
 

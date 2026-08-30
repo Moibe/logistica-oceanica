@@ -2,6 +2,7 @@
   import { T } from '@threlte/core';
   import { OrbitControls } from '@threlte/extras';
   import { Vector3 } from 'three';
+  import { SHIP_CLASS_STATS, type ShipClass } from '$lib/domain/fleet';
   import ContainerShip from './ContainerShip.svelte';
   import Foam from './Foam.svelte';
   import Ocean from './Ocean.svelte';
@@ -11,18 +12,31 @@
    * deliberately do not have. This is where the game will eventually put port
    * calls, loading and weather; for now it is the visual target.
    *
-   * `scale` is the selected ship's LOA relative to the 400 m reference hull
-   * `ContainerShip` defaults to (see its own scale note) — a feeder comes out
-   * at less than half the size of a ULCV, which is the whole point of tying
-   * this scene to whichever ship you clicked rather than always drawing the
-   * same boat. Camera presets and orbit limits scale with it too, so framing
-   * stays proportional instead of a small hull looking lost in a shot tuned
+   * Hull length AND beam both come from the selected ship's real class figures
+   * in `SHIP_CLASS_STATS` — not one uniform scale factor applied to a fixed
+   * 60×9 reference box, which is what made every class read as "the same hull,
+   * resized" no matter how different their real proportions are (a tanker is
+   * proportionally much beamier than a container ship of similar length).
+   * `scale` (LOA ratio to the 400 m reference) still drives the camera: a
+   * feeder comes out at less than half the size of a ULCV, so presets and
+   * orbit limits scale with it too, or a small hull looks lost in a shot tuned
    * for a 400 m one.
    */
   let {
     cameraPreset = 'quarter',
-    scale = 1,
-  }: { cameraPreset?: 'quarter' | 'bow' | 'deck' | 'far'; scale?: number } = $props();
+    shipClass = 'ulcv',
+    name = '',
+  }: { cameraPreset?: 'quarter' | 'bow' | 'deck' | 'far'; shipClass?: ShipClass; name?: string } =
+    $props();
+
+  const stats = $derived(SHIP_CLASS_STATS[shipClass]);
+  const scale = $derived(stats.loa / 400);
+  // ×60/400 is ContainerShip's own established metres-to-world-units
+  // conversion (see its scale note) — reused here rather than introduced
+  // fresh, so a ULCV (loa 400, beam 61.5) still comes out to exactly the
+  // 60 × 9.225 the hull was originally tuned against.
+  const lengthUnits = $derived((stats.loa * 60) / 400);
+  const beamUnits = $derived((stats.beam * 60) / 400);
 
   type Preset = { position: [number, number, number]; target: [number, number, number]; fov: number };
 
@@ -74,4 +88,4 @@
 
 <Ocean sun={SUN} />
 <Foam driftX={0} driftZ={1} />
-<ContainerShip length={60 * scale} beam={9 * scale} />
+<ContainerShip length={lengthUnits} beam={beamUnits} {shipClass} {name} />
